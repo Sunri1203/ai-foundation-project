@@ -5,21 +5,22 @@ model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 Token = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id)
 
+
+# ------------------------- 模型檢查 -------------------------
+
+#打印模型與Token格式
 print(Token)
 print(model)
 
-text = "你好世界"
+#參數量11億，符合1.1B
+model.num_parameters()
 
-token_slow_list = Token(text)
-print(token_slow_list)
+#模型設定
+print(model.config)
 
-token_slow = {
-    "input_ids": torch.tensor([token_slow_list.input_ids]),
-    "attention_mask" : torch.tensor([token_slow_list.attention_mask])
-}
 
-print("token_slow:", token_slow)
-token_fast = Token(text , return_tensors = "pt")
-# return_tensors="pt" 是告訴 tokenizer：把輸出資料直接轉成 PyTorch tensor 格式
-# 其他格式"tf"：TensorFlow tensor ,"np"：NumPy array
-print("token_fast:", token_fast)
+# ------------------------- 文字 > tokenizer -------------------------
+
+enc = Token("Hello World!" , return_tensor = "pt")
+
+
