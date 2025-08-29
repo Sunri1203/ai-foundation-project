@@ -40,22 +40,67 @@ print(enc["attention_mask"].shape)
 #只需要推理，不用訓練更新，所以這段表示停止梯度計算 > 停用梯度追蹤，省記憶體、加速
 with torch.no_grad():
     #generate(**enc)需要dict，勿把tensor格是放入會報錯(因為不是mapping)
-    outputs = model.generate(**enc, max_new_tokens = 30)
-print(Token.decode(outputs[0], skip_special_tokens = True))
-
-outputs_with_grad = model.generate(**enc, max_new_tokens = 30)
-print(Token.decode(outputs_with_grad[0], skip_special_tokens = True))
+    outputs_no_grad = model.generate(**enc, max_new_tokens = 30)
+print("outputs_no_grad:", Token.decode(outputs_no_grad[0], skip_special_tokens = True))
 
 #no_grad()只關「要不要記錄梯度」
+outputs_with_grad = model.generate(**enc, max_new_tokens = 30)
+print("outputs_with_grad:", Token.decode(outputs_with_grad[0], skip_special_tokens = True))
 
-它不會改變前向的數值或生成策略，只是省顯存、加速。
+#改變輸出需要使用到抽樣sampling
+outputs_sampling = model.generate(**enc, do_sample=True, temperature=0.8, top_p=0.9, max_new_tokens=30)
+print("outputs_sampling:",Token.decode(outputs_sampling[0], skip_special_tokens = True))
 
-所以在推理時，輸出本來就應該一樣；不同的是資源占用。
 
-你現在的生成是確定性的
+# ------------------------- 看清楚「Tensor」長什麼樣 -------------------------
 
-generate() 的預設是 greedy decoding（不抽樣）：每步都選機率最大的 token。
+input_ids = enc["input_ids"].to(model.device)
+attention_mask = enc["attention_mask"].to(model.device)
 
-確定性的演算法，給相同輸入、相同模型狀態 → 輸出必定相同。
+with torch.no_grad():
+    outputs = model.generate(input_ids = input_ids, attention_mask = attention_mask , max_new_tokens = 30)
 
-想看到「會變」：改用抽樣
+print(Token.decode(outputs[0], skip_speical_tokens = False))
+
+# ------------------------- 多輪對話 -------------------------
+
+#定義Prompt 與 question
+message = [
+    {
+        "role": "system" , "content" : "You are a inteligent AI assistant."
+    },
+    {
+        "role" : "user", "content" : "Greeting how are you?" 
+    }
+]
+
+print(message)
+
+#apply_chat_temple會把多輪對話轉成模型可懂的字串
+prompt_text = Token.apply_chat_template(
+    message, tokenize = False, add_generation_prompt = True
+)
+
+print(prompt_text)
+
+enc_chat = Token(prompt_text, return_tensors = "pt").to(model.device)
+
+enc_chat["input_ids"].shape
+enc_chat["input_ids"].shape[1]
+
+
+with torch.no_grad():
+    outputs_chat = model.generate(**enc_chat, max_new_tokens = 80)
+
+print(outputs_chat)
+print(outputs_chat.shape)
+print(Token.decode(outputs_chat[0], skip_special_token = True))
+
+#54整體 - 42輸入問題input_ids = 模型回答
+#原本資料 [ [prompt_tokens | answer_tokens] ]
+#取 [0]:       [prompt_tokens | answer_tokens]
+#取 [len(prompt):]:                [answer_tokens]
+#.shape[x] 第幾欄位的長度 Ex : tensor[1 , 4] : shape[0] > 1 ,shape[1] > 4
+take_outputs = outputs_chat[0, enc_chat["input_ids"].shape[1]:]
+print(take_outputs.shape)
+print(Token.decode(take_outputs , skip_special_tokens= True))
